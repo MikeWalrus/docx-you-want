@@ -3,15 +3,19 @@
 use tempfile::{TempDir};
 use fs_extra::dir::CopyOptions;
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, File, copy, read_to_string, write};
+use std::fs::{read_dir, copy, read_to_string, write, remove_file};
 use std::ffi::OsStr;
 use usvg;
+use zip_extensions::zip_create_from_directory;
+use std::process::Command;
+use std::io::ErrorKind ;
 
 #[derive(Debug)]
 enum Error {
     IoError,
     ImageError,
-    FileCorruptedError,
+    InkscapeNotFound,
+    PDFInvalid,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -40,9 +44,9 @@ impl From<png::EncodingError> for Error {
     }
 }
 
-impl From<minidom::Error> for Error {
-    fn from(_: minidom::Error) -> Error {
-        Error::FileCorruptedError
+impl From<zip::result::ZipError> for Error {
+    fn from(_: zip::result::ZipError) -> Error {
+        Error::IoError
     }
 }
 
@@ -50,6 +54,12 @@ fn px_to_emu(px: f64) -> i32 {
     let dpi = 96.0;
     let emus_per_inch = 914400.0;
     (px / dpi * emus_per_inch) as i32
+}
+
+fn px_to_twenties_of_pt(px: f64) -> i32 {
+    let dpi = 96.0;
+    let pt_per_inch = 72.0;
+    (px / dpi * pt_per_inch * 20.0) as i32
 }
 
 fn get_filename(svg: &Path) -> &str {
@@ -90,6 +100,7 @@ struct Docx {
     next_id: i32,
     doc_string: String,
     rels_string: String,
+    size: usvg::Size,
 }
 
 fn get_children(fixtures_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -106,7 +117,7 @@ impl Docx {
         let doc: PathBuf = [path.as_os_str(), OsStr::new("word/document.xml")].iter().collect();
         let rels: PathBuf = [path.as_os_str(), OsStr::new("word/_rels/document.xml.rels")].iter().collect();
         let media_dir = [path.as_os_str(), OsStr::new("word/media")].iter().collect();
-        Ok(Docx { dir, media_dir, doc, rels, next_id: 0, doc_string: String::new(), rels_string: String::new() })
+        Ok(Docx { dir, media_dir, doc, rels, next_id: 0, doc_string: String::new(), rels_string: String::new(), size: usvg::Size::new(793.707, 1122.52).unwrap() })
     }
 
     fn copy_base_files(dir: &TempDir) -> Result<()> {
@@ -121,7 +132,10 @@ impl Docx {
         let png = get_png_path(&self.media_dir, svg)?;
         save_png(&png, &tree)?;
         let svg_copy = &self.media_dir.join(Path::new(svg.file_name().ok_or(Error::IoError)?));
-        copy(svg, svg_copy)?;
+        if svg != svg_copy
+        {
+            copy(svg, svg_copy)?;
+        }
         self.add_to_doc(svg_copy, &png, &tree.svg_node().size);
         Ok(())
     }
@@ -204,14 +218,24 @@ impl Docx {
         })
     }
 
-    pub fn generate_docx(self) -> Result<()> {
+    pub fn generate_docx(self, p: &PathBuf) -> Result<()> {
         self.write_to_files()?;
+        zip_create_from_directory(p, &PathBuf::from(self.dir.path()))?;
         Ok(())
     }
 
     fn write_to_files(&self) -> Result<()> {
-        Docx::insert_in_file(&self.doc, &self.doc_string);
-        Docx::insert_in_file(&self.rels, &self.rels_string);
+        Docx::insert_in_file(&self.doc, &self.doc_string)?;
+        Docx::insert_in_file(&self.rels, &self.rels_string)?;
+        self.change_size()?;
+        Ok(())
+    }
+
+    fn change_size(&self) -> Result<()> {
+        let s = read_to_string(&self.doc)?
+            .replace("!WIDTH!", &px_to_twenties_of_pt(self.size.width()).to_string())
+            .replace("!HEIGHT!", &px_to_twenties_of_pt(self.size.height()).to_string());
+        write(&self.doc, s)?;
         Ok(())
     }
 
@@ -220,6 +244,37 @@ impl Docx {
         write(path, s)?;
         Ok(())
     }
+
+    fn convert_pdf(&mut self, pdf: &Path) -> Result<()> {
+        let mut page = 0;
+        let mut images: Vec<PathBuf> = Vec::new();
+        loop {
+            page += 1;
+            let image = PathBuf::from(&self.media_dir).join(format! {"{}.svg", page});
+            let output = match
+            Command::new("inkscape")
+                .arg(pdf)
+                .arg(format!("--pdf-page={}", page))
+                .arg("-o").arg(&image)
+                .arg("--pdf-poppler")
+                .output() {
+                Err(e) => {
+                    return if let ErrorKind::NotFound = e.kind() {
+                        Err(Error::InkscapeNotFound)
+                    } else { Err(Error::IoError) };
+                }
+                Ok(output) => (output)
+            };
+            if output.stderr.is_empty() {
+                images.push(image);
+                continue;
+            }
+            remove_file(&image)?;
+            break;
+        }
+        self.size = read_svg(&images.get(0).ok_or(Error::PDFInvalid)?)?.svg_node().size;
+        images.iter().map(|i| self.add_image_svg(&i)).collect()
+    }
 }
 
 
@@ -227,14 +282,6 @@ impl Docx {
 mod tests {
     use super::*;
     use std::fs::remove_file;
-
-    #[test]
-    fn test() {
-        let document = std::fs::read_to_string("/home/mike/repos/rust/docx-you-want/fixtures/word/document.xml").unwrap();
-        let root: minidom::Element = document.parse().unwrap();
-        println!("{:#?}", root);
-        println!("{}", String::from(&root));
-    }
 
     #[test]
     fn test_dir() -> Result<()>
@@ -268,11 +315,15 @@ mod tests {
 
     #[test]
     fn test_svg_to_png() {
-        let tests_dir = String::from(env!("CARGO_MANIFEST_DIR")) + "/tests/";
+        let tests_dir = get_tests_dir();
         let dst = PathBuf::from(format!("{}{}", tests_dir, "2.png"));
         remove_file(&dst).unwrap();
         svg_to_png(&PathBuf::from(format!("{}{}", tests_dir, "2.svg")), &dst).unwrap();
         assert!(dst.exists())
+    }
+
+    fn get_tests_dir() -> String {
+        String::from(env!("CARGO_MANIFEST_DIR")) + "/tests/"
     }
 
     #[test]
@@ -346,5 +397,25 @@ mod tests {
         let mut docx = Docx::new().unwrap();
         docx.doc_string = String::from("<p></p>");
         docx.write_to_files().unwrap();
+    }
+
+    #[test]
+    fn test_generate_docx() {
+        let mut docx = Docx::new().unwrap();
+        docx.add_image_svg(&get_test_svg()).unwrap();
+        docx.generate_docx(&PathBuf::from(get_tests_dir() + "a.docx")).unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_convert_pdf() {
+        let mut docx = Docx::new().unwrap();
+        docx.convert_pdf(&PathBuf::from(get_tests_dir() + "report.pdf")).unwrap();
+        docx.generate_docx(&PathBuf::from(get_tests_dir() + "report.docx")).unwrap();
+    }
+
+    #[test]
+    fn test_size() {
+        assert_eq!(px_to_twenties_of_pt(793.707), 11905)
     }
 }

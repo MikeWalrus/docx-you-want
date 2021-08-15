@@ -34,7 +34,7 @@
     <w:body>
         !INSERT_HERE!
         <w:sectPr>
-            <w:pgSz w:w="11906" w:h="16838"/>
+            <w:pgSz w:w="!WIDTH!" w:h="!HEIGHT!"/>
             <w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>
         </w:sectPr>
     </w:body>
