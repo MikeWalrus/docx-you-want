@@ -1,5 +1,5 @@
 use std::env::args;
-use std::path::{PathBuf, Path};
+use std::path::Path;
 use docx_you_want as dyw;
 use docx_you_want::Error;
 use std::process::exit;
@@ -7,7 +7,7 @@ use std::process::exit;
 
 fn main() {
     let args: Vec<_> = args().collect();
-    if args.len() != 3{
+    if args.len() != 3 {
         println!("1st arg: PDF file, 2nd arg: .docx file");
         exit(-1)
     }
@@ -15,7 +15,7 @@ fn main() {
     let dst = Path::new(&args[2]);
     if let Err(e) = convert(src, dst) {
         let msg = match e {
-            Error::IoError => "Error occurred during I/O.",
+            Error::IoError => "An error occurred during I/O.",
             Error::ImageError => "Something went wrong while processing the images.",
             Error::InkscapeNotFound => "Inkscape not found. Consider installing inkscape?",
             Error::PDFInvalid => "Invalid PDF."

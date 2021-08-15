@@ -8,7 +8,7 @@ use std::ffi::OsStr;
 use usvg;
 use zip_extensions::zip_create_from_directory;
 use std::process::Command;
-use std::io::ErrorKind ;
+use std::io::ErrorKind;
 
 #[derive(Debug)]
 pub enum Error {
@@ -64,12 +64,6 @@ fn px_to_twenties_of_pt(px: f64) -> i32 {
 
 fn get_filename(svg: &Path) -> &str {
     svg.file_name().unwrap().to_str().unwrap()
-}
-
-fn svg_to_png(src: &Path, dst: &Path) -> Result<()> {
-    let rtree = read_svg(src)?;
-    save_png(dst, &rtree)?;
-    Ok(())
 }
 
 fn read_svg(src: &Path) -> Result<usvg::Tree> {
