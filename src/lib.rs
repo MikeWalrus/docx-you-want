@@ -1,18 +1,17 @@
 #![recursion_limit = "512"]
 
-use tempfile::{TempDir, tempdir};
+use tempfile::{TempDir};
 use fs_extra::dir::CopyOptions;
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, File, copy};
+use std::fs::{read_dir, File, copy, read_to_string, write};
 use std::ffi::OsStr;
 use usvg;
-use std::io::Read;
-use usvg::Size;
 
 #[derive(Debug)]
 enum Error {
     IoError,
     ImageError,
+    FileCorruptedError,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -41,6 +40,12 @@ impl From<png::EncodingError> for Error {
     }
 }
 
+impl From<minidom::Error> for Error {
+    fn from(_: minidom::Error) -> Error {
+        Error::FileCorruptedError
+    }
+}
+
 fn px_to_emu(px: f64) -> i32 {
     let dpi = 96.0;
     let emus_per_inch = 914400.0;
@@ -53,8 +58,7 @@ fn get_filename(svg: &Path) -> &str {
 
 fn svg_to_png(src: &Path, dst: &Path) -> Result<()> {
     let rtree = read_svg(src)?;
-    let size = rtree.svg_node().size;
-    save_png(dst, &rtree);
+    save_png(dst, &rtree)?;
     Ok(())
 }
 
@@ -81,8 +85,8 @@ fn get_png_path(prefix: &Path, svg_path: &Path) -> Result<PathBuf> {
 struct Docx {
     dir: TempDir,
     media_dir: PathBuf,
-    doc: File,
-    rels: File,
+    doc: PathBuf,
+    rels: PathBuf,
     next_id: i32,
     doc_string: String,
     rels_string: String,
@@ -99,12 +103,10 @@ impl Docx {
         let dir = TempDir::new()?;
         Docx::copy_base_files(&dir)?;
         let path = dir.path();
-        let doc_path: PathBuf = [path.as_os_str(), OsStr::new("word/document.xml")].iter().collect();
-        let doc = File::open(doc_path)?;
-        let rels_path: PathBuf = [path.as_os_str(), OsStr::new("word/_rels/document.xml.rels")].iter().collect();
-        let relations = File::open(rels_path)?;
+        let doc: PathBuf = [path.as_os_str(), OsStr::new("word/document.xml")].iter().collect();
+        let rels: PathBuf = [path.as_os_str(), OsStr::new("word/_rels/document.xml.rels")].iter().collect();
         let media_dir = [path.as_os_str(), OsStr::new("word/media")].iter().collect();
-        Ok(Docx { dir, media_dir, doc, rels: relations, next_id: 0, doc_string: String::new(), rels_string: String::new() })
+        Ok(Docx { dir, media_dir, doc, rels, next_id: 0, doc_string: String::new(), rels_string: String::new() })
     }
 
     fn copy_base_files(dir: &TempDir) -> Result<()> {
@@ -114,16 +116,10 @@ impl Docx {
         Ok(())
     }
 
-    fn add_images(&self, _images: Vec<PathBuf>) -> Result<()> {
-        let png_dir = tempdir()?;
-        let _png_path_prefix = png_dir.path();
-        Ok(())
-    }
-
     fn add_image_svg(&mut self, svg: &Path) -> Result<()> {
         let tree = read_svg(svg)?;
         let png = get_png_path(&self.media_dir, svg)?;
-        save_png(&png, &tree);
+        save_png(&png, &tree)?;
         let svg_copy = &self.media_dir.join(Path::new(svg.file_name().ok_or(Error::IoError)?));
         copy(svg, svg_copy)?;
         self.add_to_doc(svg_copy, &png, &tree.svg_node().size);
@@ -206,6 +202,23 @@ impl Docx {
         self.rels_string = format!("{}{}", self.rels_string, format_xml::xml! {
             <Relationship Id={rid} Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target={target}/>
         })
+    }
+
+    pub fn generate_docx(self) -> Result<()> {
+        self.write_to_files()?;
+        Ok(())
+    }
+
+    fn write_to_files(&self) -> Result<()> {
+        Docx::insert_in_file(&self.doc, &self.doc_string);
+        Docx::insert_in_file(&self.rels, &self.rels_string);
+        Ok(())
+    }
+
+    fn insert_in_file(path: &Path, content: &str) -> Result<()> {
+        let s = read_to_string(path)?.replace("!INSERT_HERE!", content);
+        write(path, s)?;
+        Ok(())
     }
 }
 
@@ -326,5 +339,12 @@ mod tests {
 <Relationship Id="rId0" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/2.svg" />
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/2.png" />
             }.to_string())
+    }
+
+    #[test]
+    fn test_write_to_file() {
+        let mut docx = Docx::new().unwrap();
+        docx.doc_string = String::from("<p></p>");
+        docx.write_to_files().unwrap();
     }
 }
