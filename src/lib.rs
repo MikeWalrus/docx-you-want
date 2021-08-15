@@ -11,14 +11,14 @@ use std::process::Command;
 use std::io::ErrorKind ;
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     IoError,
     ImageError,
     InkscapeNotFound,
     PDFInvalid,
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<std::io::Error> for Error {
     fn from(_: std::io::Error) -> Error {
@@ -92,7 +92,7 @@ fn get_png_path(prefix: &Path, svg_path: &Path) -> Result<PathBuf> {
     Ok(prefix.join(Path::new(&filename)))
 }
 
-struct Docx {
+pub struct Docx {
     dir: TempDir,
     media_dir: PathBuf,
     doc: PathBuf,
@@ -110,7 +110,7 @@ fn get_children(fixtures_dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 impl Docx {
-    fn new() -> Result<Docx> {
+    pub fn new() -> Result<Docx> {
         let dir = TempDir::new()?;
         Docx::copy_base_files(&dir)?;
         let path = dir.path();
@@ -245,7 +245,7 @@ impl Docx {
         Ok(())
     }
 
-    fn convert_pdf(&mut self, pdf: &Path) -> Result<()> {
+    pub fn convert_pdf(&mut self, pdf: &Path) -> Result<()> {
         let mut page = 0;
         let mut images: Vec<PathBuf> = Vec::new();
         loop {
