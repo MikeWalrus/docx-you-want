@@ -27,7 +27,7 @@ fn main() {
 
 fn convert(src: &Path, dst: &Path) -> dyw::Result<()> {
     let mut docx = dyw::Docx::new()?;
-    docx.convert_pdf(src);
-    docx.generate_docx(&dst.to_owned());
+    docx.convert_pdf(src)?;
+    docx.generate_docx(&dst.to_owned())?;
     Ok(())
 }
