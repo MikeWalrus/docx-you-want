@@ -1,3 +1,19 @@
+/* This file is part of docx-you-want.
+
+    docx-you-want is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    docx-you-want is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with docx-you-want.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #![recursion_limit = "512"]
 
 use tempfile::{TempDir};
@@ -8,7 +24,7 @@ use std::ffi::OsStr;
 use usvg;
 use zip_extensions::zip_create_from_directory;
 use std::process::Command;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind, Write};
 
 #[derive(Debug)]
 pub enum Error {
@@ -131,6 +147,8 @@ impl Docx {
             copy(svg, svg_copy)?;
         }
         self.add_to_doc(svg_copy, &png, &tree.svg_node().size);
+        print!(".");
+        io::stdout().flush()?;
         Ok(())
     }
 
@@ -242,6 +260,7 @@ impl Docx {
     pub fn convert_pdf(&mut self, pdf: &Path) -> Result<()> {
         let mut page = 0;
         let mut images: Vec<PathBuf> = Vec::new();
+        print!("Calling Inkscape to generate images ");
         loop {
             page += 1;
             let image = PathBuf::from(&self.media_dir).join(format! {"{}.svg", page});
@@ -259,14 +278,21 @@ impl Docx {
                 }
                 Ok(output) => (output)
             };
+            print!(".");
+            io::stdout().flush()?;
             if output.stderr.is_empty() {
                 images.push(image);
                 continue;
             }
             remove_file(&image)?;
+            println!(" Done.");
             break;
         }
+        print!("Getting the size of the first page ... ");
         self.size = read_svg(&images.get(0).ok_or(Error::PDFInvalid)?)?.svg_node().size;
+        println!("Done.");
+        print!("Adding all the images ");
+        io::stdout().flush()?;
         images.iter().map(|i| self.add_image_svg(&i)).collect()
     }
 }
@@ -307,14 +333,6 @@ mod tests {
         PathBuf::from(format!("{}{}", tests_dir, "2.svg"))
     }
 
-    #[test]
-    fn test_svg_to_png() {
-        let tests_dir = get_tests_dir();
-        let dst = PathBuf::from(format!("{}{}", tests_dir, "2.png"));
-        remove_file(&dst).unwrap();
-        svg_to_png(&PathBuf::from(format!("{}{}", tests_dir, "2.svg")), &dst).unwrap();
-        assert!(dst.exists())
-    }
 
     fn get_tests_dir() -> String {
         String::from(env!("CARGO_MANIFEST_DIR")) + "/tests/"
@@ -337,7 +355,7 @@ mod tests {
         </w:rPr>
         <w:drawing>
             <wp:inline distT="0" distB="0" distL="0" distR="0">
-                <wp:extent cx="7560055" cy="10692003" />
+                <wp:extent cx="7560000" cy="10692000" />
                 <wp:effectExtent l="0" t="0" r="0" b="0" />
                 <wp:docPr id="0" name="0" />
                 <wp:cNvGraphicFramePr>
@@ -365,7 +383,7 @@ mod tests {
                             <pic:spPr>
                                 <a:xfrm>
                                     <a:off x="0" y="0" />
-                                    <a:ext cx="7560055" cy="10692003" />
+                                    <a:ext cx="7560000" cy="10692000" />
                                 </a:xfrm>
                                 <a:prstGeom prst="rect">
                                     <a:avLst />
@@ -398,14 +416,6 @@ mod tests {
         let mut docx = Docx::new().unwrap();
         docx.add_image_svg(&get_test_svg()).unwrap();
         docx.generate_docx(&PathBuf::from(get_tests_dir() + "a.docx")).unwrap();
-    }
-
-    #[test]
-    #[ignore]
-    fn test_convert_pdf() {
-        let mut docx = Docx::new().unwrap();
-        docx.convert_pdf(&PathBuf::from(get_tests_dir() + "report.pdf")).unwrap();
-        docx.generate_docx(&PathBuf::from(get_tests_dir() + "report.docx")).unwrap();
     }
 
     #[test]
