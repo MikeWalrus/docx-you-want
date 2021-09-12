@@ -8,7 +8,6 @@ license = "GPL3"
 
 [dependencies]
 tempfile = "3"
-fs_extra = "1.2.0"
 resvg = "0.15.0"
 usvg = "0.15.0"
 tiny-skia = "0.5.1"

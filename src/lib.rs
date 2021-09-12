@@ -17,9 +17,8 @@
 #![recursion_limit = "512"]
 
 use tempfile::{TempDir};
-use fs_extra::dir::CopyOptions;
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, copy, read_to_string, write, remove_file};
+use std::fs::{copy, read_to_string, write, remove_file};
 use std::ffi::OsStr;
 use usvg;
 use zip_extensions::zip_create_from_directory;
@@ -38,12 +37,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<std::io::Error> for Error {
     fn from(_: std::io::Error) -> Error {
-        Error::IoError
-    }
-}
-
-impl From<fs_extra::error::Error> for Error {
-    fn from(_: fs_extra::error::Error) -> Error {
         Error::IoError
     }
 }
@@ -113,11 +106,6 @@ pub struct Docx {
     size: usvg::Size,
 }
 
-fn get_children(fixtures_dir: &Path) -> Result<Vec<PathBuf>> {
-    let children: std::result::Result<Vec<_>, _> = read_dir(fixtures_dir)?.collect();
-    let children: Vec<PathBuf> = children?.iter().map(|i| i.path()).collect();
-    Ok(children)
-}
 
 impl Docx {
     pub fn new() -> Result<Docx> {
@@ -131,9 +119,12 @@ impl Docx {
     }
 
     fn copy_base_files(dir: &TempDir) -> Result<()> {
-        let fixtures_dir = Path::new("/home/mike/repos/rust/docx-you-want/fixtures");
-        let children = get_children(fixtures_dir)?;
-        fs_extra::copy_items(&children, &dir, &CopyOptions::new())?;
+        let fixtures_zip = include_bytes!("../fixtures/fixtures.zip");
+        let mut zip_path = dir.path().to_owned();
+        zip_path.push("fixtures.zip");
+        std::fs::write(&zip_path, fixtures_zip)?;
+        zip_extensions::read::zip_extract(&zip_path, &dir.path().to_owned())?;
+        remove_file(zip_path)?;
         Ok(())
     }
 
@@ -301,7 +292,13 @@ impl Docx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::remove_file;
+    use std::fs::read_dir;
+
+    fn get_children(fixtures_dir: &Path) -> Result<Vec<PathBuf>> {
+        let children: std::result::Result<Vec<_>, _> = read_dir(fixtures_dir)?.collect();
+        let children: Vec<PathBuf> = children?.iter().map(|i| i.path()).collect();
+        Ok(children)
+    }
 
     #[test]
     fn test_dir() -> Result<()>
@@ -310,11 +307,15 @@ mod tests {
         let dir = docx.dir.path();
         assert!(dir.exists());
         let children = get_children(&dir)?;
-        let children_str: Vec<&str> = children
+        let mut children_str: Vec<&str> = children
             .iter()
             .map(|i| i.file_name().unwrap().to_str().unwrap())
             .collect();
-        assert_eq!(children_str, vec!["word", "[Content_Types].xml", "_rels"]);
+        let mut result = vec!["word", "[Content_Types].xml", "_rels"];
+
+        children_str.sort();
+        result.sort();
+        assert_eq!(children_str, result);
         Ok(())
     }
 
