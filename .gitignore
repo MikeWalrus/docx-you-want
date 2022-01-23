@@ -1,6 +1,1 @@
 /target
-/.idea
-debug/
-**/*.rs.bk
-*.pdb
-Cargo.lock

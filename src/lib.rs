@@ -77,13 +77,13 @@ fn get_filename(svg: &Path) -> &str {
 fn read_svg(src: &Path) -> Result<usvg::Tree> {
     let opt = usvg::Options::default();
     let svg_data = std::fs::read(src)?;
-    Ok(usvg::Tree::from_data(&svg_data, &opt)?)
+    Ok(usvg::Tree::from_data(&svg_data, &opt.to_ref())?)
 }
 
 fn save_png(dst: &Path, rtree: &usvg::Tree) -> Result<()> {
     let size = rtree.svg_node().size.to_screen_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height()).unwrap();
-    resvg::render(rtree, usvg::FitTo::Original, pixmap.as_mut()).ok_or(Error::ImageError)?;
+    resvg::render(rtree, usvg::FitTo::Original, tiny_skia::Transform::identity() ,pixmap.as_mut()).ok_or(Error::ImageError)?;
     pixmap.save_png(dst)?;
     Ok(())
 }
