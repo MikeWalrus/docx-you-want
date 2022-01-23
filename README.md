@@ -3,6 +3,9 @@
 Since these two formats are inherently different, it is impossible to get a `.docx` file from a PDF without a noticeable difference in their appearances.
 `docx-you-want` on the other hand, sort of preserve the look of the original PDF.
 
+# Packages
+[![AUR](https://shields.io/aur/version/docx-you-want)](https://aur.archlinux.org/packages/docx-you-want/)
+
 ## What does it really do?
 1. It calls [Inkscape](https://inkscape.org/) to convert every individual page of the PDF into SVGs, thus preserving its look.
    This means to run it, `inkscape` should be installed and in your `PATH`.
