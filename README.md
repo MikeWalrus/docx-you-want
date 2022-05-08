@@ -1,7 +1,7 @@
 # docx-you-want
 `docx-you-want` is a tool to convert a PDF document into a `.docx` file ... in an unusual way.
 Since these two formats are inherently different, it is impossible to get a `.docx` file from a PDF without a noticeable difference in their appearances.
-`docx-you-want` on the other hand, sort of preserve the look of the original PDF.
+`docx-you-want` on the other hand, sort of preserves the look of the original PDF.
 
 # Packages
 [![AUR](https://shields.io/aur/version/docx-you-want)](https://aur.archlinux.org/packages/docx-you-want/)

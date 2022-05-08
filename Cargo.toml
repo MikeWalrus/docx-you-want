@@ -1,17 +1,17 @@
 [package]
 name = "docx-you-want"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 license = "GPL3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tempfile = "3"
-resvg = "0.20.0"
-usvg = "0.20.0"
+resvg = "0.22.0"
+usvg = "0.22.0"
 tiny-skia = "0.6.2"
-png = "0.17.2"
+png = "0.17.5"
 format_xml = "0.2.0"
 zip-extensions = "0.6.1"
 zip = "0.5.13"
